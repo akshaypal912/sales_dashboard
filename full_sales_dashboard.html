@@ -61,7 +61,7 @@ document.getElementById('file').addEventListener('change', function(e){
 function toNum(v){return isNaN(Number(v))?NaN:Number(v);}
 
 function renderDashboard(data){
-  // Expecting array of countries
+  
   const valid = data.map(d=> ({
     country: d.country || d.name,
     continent: d.continent || d.region || 'Unknown',
@@ -74,7 +74,6 @@ function renderDashboard(data){
     unemployment: toNum(d.unemployment_pct || d.unemployment)
   }));
 
-  // PIE: GDP share by continent
   const contAgg = {};
   valid.forEach(v=>{
     if(!contAgg[v.continent]) contAgg[v.continent]=0;
@@ -84,7 +83,7 @@ function renderDashboard(data){
   const values = Object.values(contAgg);
   Plotly.newPlot('pie',[{type:'pie',labels,values,textinfo:'label+percent',hole:0.3}],{title:'GDP Share by Continent',paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
 
-  // BUBBLE: GDP per capita vs Population
+
   const bubbleData = valid.filter(v=>v.gdp && v.population).map(v=>({
     x:v.gdp/v.population, y:v.population, size:v.gdp, text:v.country
   }));
@@ -94,7 +93,7 @@ function renderDashboard(data){
     marker:{size:bubbleData.map(d=>Math.log10(d.size)*4), color:bubbleData.map(d=>d.x), colorscale:'Viridis', showscale:true}
   }],{title:'GDP per Capita vs Population',xaxis:{title:'GDP per Capita'},yaxis:{title:'Population'},paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
 
-  // BAR: Tax vs Expense % of GDP by Continent
+  
   const contTax = {}, contExp = {};
   valid.forEach(v=>{
     if(!contTax[v.continent]){contTax[v.continent]=[]; contExp[v.continent]=[];}
@@ -106,11 +105,11 @@ function renderDashboard(data){
   const expAvg = conts.map(c=>avg(contExp[c]));
   Plotly.newPlot('bars',[{x:conts,y:taxAvg,name:'Tax %',type:'bar'},{x:conts,y:expAvg,name:'Expense %',type:'bar'}],{barmode:'group',title:'Avg Tax vs Expense % of GDP',paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
 
-  // SCATTER: Inflation vs Unemployment
+  
   const s = valid.filter(v=>!isNaN(v.inflation)&&!isNaN(v.unemployment));
   Plotly.newPlot('scatter',[{x:s.map(d=>d.inflation),y:s.map(d=>d.unemployment),text:s.map(d=>d.country),mode:'markers',type:'scatter'}],{title:'Inflation vs Unemployment',xaxis:{title:'Inflation %'},yaxis:{title:'Unemployment %'},paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
 
-  // HEATMAP: Internet % vs GDP
+  
   const net = valid.filter(v=>!isNaN(v.internet)&&!isNaN(v.gdp));
   Plotly.newPlot('wide',[{x:net.map(d=>d.internet),y:net.map(d=>d.gdp),text:net.map(d=>d.country),mode:'markers',marker:{size:8,color:net.map(d=>d.gdp/d.population),colorscale:'Viridis',showscale:true}}],{title:'Internet Penetration vs GDP',xaxis:{title:'Internet %'},yaxis:{title:'GDP'},paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
 }
