@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Interactive Sales / Economic Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa6b2;
+      --accent:#4f46e5;
+      --glass: rgba(255,255,255,0.03);
+    }
+    html,body{height:100%; margin:0; font-family: Inter, system-ui, sans-serif; background:#071023; color:#e6eef6;}
+    .container{max-width:1200px; margin:18px auto; padding:18px;}
+    header{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+    h1{font-size:22px; margin:0;}
+    input[type=file]{background:var(--glass); border:1px solid rgba(255,255,255,0.05); color:white; padding:8px; border-radius:6px;}
+    .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+    .card{background:var(--card); border-radius:10px; padding:10px; box-shadow:0 6px 16px rgba(0,0,0,0.5);}
+    .chart{height:320px;}
+    #wide{grid-column:1 / -1; height:360px;}
+    @media(max-width:900px){.grid{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Interactive Sales / Economic Dashboard</h1>
+      <input id="file" type="file" accept=".json,application/json">
+    </header>
+    <main>
+      <div class="grid">
+        <div id="pie" class="card chart"></div>
+        <div id="bubble" class="card chart"></div>
+        <div id="bars" class="card chart"></div>
+        <div id="scatter" class="card chart"></div>
+        <div id="wide" class="card"></div>
+      </div>
+    </main>
+  </div>
+
+<script>
+document.getElementById('file').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try{
+      const data = JSON.parse(evt.target.result);
+      renderDashboard(data);
+    }catch(err){
+      alert('Invalid JSON file! ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function toNum(v){return isNaN(Number(v))?NaN:Number(v);}
+
+function renderDashboard(data){
+  // Expecting array of countries
+  const valid = data.map(d=> ({
+    country: d.country || d.name,
+    continent: d.continent || d.region || 'Unknown',
+    gdp: toNum(d.gdp || d.GDP),
+    population: toNum(d.population),
+    internet: toNum(d.internet_pct || d.internet),
+    tax: toNum(d.tax_revenue_pct_gdp || d.tax),
+    expense: toNum(d.expense_pct_gdp || d.expense),
+    inflation: toNum(d.inflation),
+    unemployment: toNum(d.unemployment_pct || d.unemployment)
+  }));
+
+  // PIE: GDP share by continent
+  const contAgg = {};
+  valid.forEach(v=>{
+    if(!contAgg[v.continent]) contAgg[v.continent]=0;
+    contAgg[v.continent]+=v.gdp||0;
+  });
+  const labels = Object.keys(contAgg);
+  const values = Object.values(contAgg);
+  Plotly.newPlot('pie',[{type:'pie',labels,values,textinfo:'label+percent',hole:0.3}],{title:'GDP Share by Continent',paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
+
+  // BUBBLE: GDP per capita vs Population
+  const bubbleData = valid.filter(v=>v.gdp && v.population).map(v=>({
+    x:v.gdp/v.population, y:v.population, size:v.gdp, text:v.country
+  }));
+  Plotly.newPlot('bubble',[{
+    x:bubbleData.map(d=>d.x), y:bubbleData.map(d=>d.y),
+    mode:'markers', text:bubbleData.map(d=>d.text),
+    marker:{size:bubbleData.map(d=>Math.log10(d.size)*4), color:bubbleData.map(d=>d.x), colorscale:'Viridis', showscale:true}
+  }],{title:'GDP per Capita vs Population',xaxis:{title:'GDP per Capita'},yaxis:{title:'Population'},paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
+
+  // BAR: Tax vs Expense % of GDP by Continent
+  const contTax = {}, contExp = {};
+  valid.forEach(v=>{
+    if(!contTax[v.continent]){contTax[v.continent]=[]; contExp[v.continent]=[];}
+    if(!isNaN(v.tax)) contTax[v.continent].push(v.tax);
+    if(!isNaN(v.expense)) contExp[v.continent].push(v.expense);
+  });
+  const conts = Object.keys(contTax);
+  const taxAvg = conts.map(c=>avg(contTax[c]));
+  const expAvg = conts.map(c=>avg(contExp[c]));
+  Plotly.newPlot('bars',[{x:conts,y:taxAvg,name:'Tax %',type:'bar'},{x:conts,y:expAvg,name:'Expense %',type:'bar'}],{barmode:'group',title:'Avg Tax vs Expense % of GDP',paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
+
+  // SCATTER: Inflation vs Unemployment
+  const s = valid.filter(v=>!isNaN(v.inflation)&&!isNaN(v.unemployment));
+  Plotly.newPlot('scatter',[{x:s.map(d=>d.inflation),y:s.map(d=>d.unemployment),text:s.map(d=>d.country),mode:'markers',type:'scatter'}],{title:'Inflation vs Unemployment',xaxis:{title:'Inflation %'},yaxis:{title:'Unemployment %'},paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
+
+  // HEATMAP: Internet % vs GDP
+  const net = valid.filter(v=>!isNaN(v.internet)&&!isNaN(v.gdp));
+  Plotly.newPlot('wide',[{x:net.map(d=>d.internet),y:net.map(d=>d.gdp),text:net.map(d=>d.country),mode:'markers',marker:{size:8,color:net.map(d=>d.gdp/d.population),colorscale:'Viridis',showscale:true}}],{title:'Internet Penetration vs GDP',xaxis:{title:'Internet %'},yaxis:{title:'GDP'},paper_bgcolor:'transparent',plot_bgcolor:'transparent'});
+}
+
+function avg(arr){return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;}
+</script>
+</body>
+</html>
